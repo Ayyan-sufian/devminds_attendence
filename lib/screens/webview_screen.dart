@@ -1,60 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-class WebviewScreen extends StatefulWidget {
+import '../provider/webview_state.dart';
+
+class WebviewScreen extends ConsumerWidget {
   const WebviewScreen({super.key});
 
   @override
-  State<WebviewScreen> createState() => _WebviewScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final webViewState = ref.watch(webViewProvider);
+    final isLoading = webViewState.isLoading;
 
-class _WebviewScreenState extends State<WebviewScreen>
-    with SingleTickerProviderStateMixin {
-  bool isLoading = true;
-  late final WebViewController _controller;
-
-  late final AnimationController _animationController;
-  late final Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Color(0xFF714B67))
-      ..loadRequest(
-        Uri.parse("https://app.devmindsstudio.com/odoo/attendances"),
-      )
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (url) {
-            setState(() {
-              isLoading = false;
-            });
-          },
-        ),
-      );
-
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -62,28 +20,59 @@ class _WebviewScreenState extends State<WebviewScreen>
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: Color(0xFF714B67),
+        backgroundColor: const Color(0xFF714B67),
+        body: SafeArea(
+          child: Stack(
+            children: [
 
-        body: Stack(
-          children: [
-            SafeArea(child: WebViewWidget(controller: _controller)),
-            if (isLoading)
-              Center(
-                child: AnimatedBuilder(
-                  animation: _scaleAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _scaleAnimation.value,
-                      child: Image.asset(
-                        'assets/img/dev_logo_trance.png',
-                        width: 300,
-                        height: 300,
+              // ── WebView + pull-to-refresh ──────────────────────────
+              AbsorbPointer(
+                // Blocks ALL taps/gestures on WebView while loading
+                absorbing: isLoading,
+                child: RefreshIndicator(
+                  color: const Color(0xFF714B67),
+                  onRefresh: () =>
+                      ref.read(webViewProvider.notifier).reloadPage(),
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top,
+                      child: WebViewWidget(
+                        controller: webViewState.controller,
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
-          ],
+
+              // ── Full-screen loading overlay ────────────────────────
+              if (isLoading)
+                Container(
+                  color: const Color(0xFF714B67).withOpacity(0.85),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 3,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          "Loading...",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
